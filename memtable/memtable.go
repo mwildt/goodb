@@ -43,7 +43,7 @@ func CreateMemtable[K constraints.Ordered, V any](datadir string, name string) (
 	} else {
 		repo := &Memtable[K, V]{
 			name:  name,
-			index: skiplist.NewSkipList[K, V](4),
+			index: skiplist.NewSkipList[K, V](),
 			log:   messageLog,
 			mutex: &sync.Mutex{},
 			frs:   frs,

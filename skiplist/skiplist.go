@@ -5,18 +5,8 @@ import (
 	"fmt"
 	"golang.org/x/exp/constraints"
 	"log"
-	"math"
 	"math/rand"
 )
-
-// ceil(log(n) / log(1/p))
-func calculateHeight(n int, p float64) int {
-	if n <= 1 {
-		return 1
-	}
-	height := math.Ceil(math.Log(float64(n)) / math.Log(1/p))
-	return int(height)
-}
 
 func randomLevel(maxLevel int) int {
 	level := 1
@@ -50,10 +40,10 @@ type SkipList[K constraints.Ordered, V any] struct {
 	level int
 }
 
-func NewSkipList[K constraints.Ordered, V any](level int) *SkipList[K, V] {
+func NewSkipList[K constraints.Ordered, V any]() *SkipList[K, V] {
 	return &SkipList[K, V]{
 		head:  nil,
-		level: level,
+		level: 1,
 	}
 }
 
@@ -78,38 +68,32 @@ func (sl *SkipList[K, V]) search(key K) (node *skipListNode[K, V], refs []*skipL
 	return node.next[0], refs
 }
 
-// findet den knoten mit dem gleichen oder nächsthöheren key (node)
-// und für jedes level den Knoten, welcher auf node zeigt (also kleiner ist)
-func (sl *SkipList[K, V]) tsearch(key K) (node *skipListNode[K, V], refs []*skipListNode[K, V]) {
-	if sl.head == nil {
-		return node, refs
+func (sl *SkipList[K, V]) autoadjustLevel() {
+	if sl.Size() >= 2<<(sl.level) {
+		sl.increaseLevel()
+	} else if sl.level > 1 && sl.Size() <= 2<<(sl.level-2) {
+		sl.decreaseLevel()
 	}
-	node = sl.head
-	refs = make([]*skipListNode[K, V], sl.level)
-	var upLevelRef *skipListNode[K, V]
-	for level := sl.level - 1; level >= 0; level-- {
-		//fmt.Printf("search level: %d ckey: %v\n", level, node.key)
-		if node.key == key {
-			refs[level] = upLevelRef
-		} else {
-			for node.hasNext(level) && node.next[level].key <= key {
-				refs[level] = node
-				node = node.next[level]
-				//fmt.Printf("\t >> to ckey: %v [ref is on key %v]\n", node.key, refs[level].key)
-			}
-			// wenn ich am ende auf dem letzten element stehe, aber der richtige node noch nicht erreicht ist
-			if node.key != key {
-				refs[level] = node
-				//fmt.Printf("\t ckey: %v adjust ref to key %v]\n", node.key, refs[level].key)
-			}
-		}
-		upLevelRef = refs[level]
+}
+
+func (sl *SkipList[K, V]) increaseLevel() {
+	sl.level++
+	if sl.head != nil {
+		sl.head.next = append(sl.head.next, nil)
 	}
-	// falls node noch der letzte knoten ist, müssen wir noch 1 weiter gehen
-	if node.key < key {
-		node = node.next[0]
+}
+
+func (sl *SkipList[K, V]) decreaseLevel() {
+	if sl.level <= 2 {
+		return
 	}
-	return node, refs
+	sl.level--
+	current := sl.head
+	for current != nil {
+		follower := current.next[sl.level]
+		current.next = current.next[:sl.level]
+		current = follower
+	}
 }
 
 func (sl *SkipList[K, V]) newRandomNode(key K, value V) *skipListNode[K, V] {
@@ -144,8 +128,9 @@ func (sl *SkipList[K, V]) Set(key K, value V) {
 	if node != nil && node.key == key { // update
 		node.value = value
 		return
+	}
 
-	} else if node == sl.head { // append first
+	if node == sl.head { // append first
 		newHead := &skipListNode[K, V]{key, value, make([]*skipListNode[K, V], sl.level)}
 		newSecond := sl.newRandomNode(sl.head.key, sl.head.value)
 
@@ -158,21 +143,20 @@ func (sl *SkipList[K, V]) Set(key K, value V) {
 			}
 		}
 		sl.head = newHead
-		sl.size++
 	} else if node == nil { // append end
 		newNode := sl.newRandomNode(key, value)
 		for level, ref := range refs[0:len(newNode.next)] {
 			ref.next[level] = newNode
 		}
-		sl.size++
 	} else if node != nil { // append mid
 		newNode := sl.newRandomNode(key, value)
 		for level, ref := range refs[0:len(newNode.next)] {
 			newNode.next[level] = ref.next[level]
 			ref.next[level] = newNode
 		}
-		sl.size++
 	}
+	sl.size++
+	sl.autoadjustLevel()
 }
 
 func (sl *SkipList[K, V]) Delete(key K) bool {
@@ -199,14 +183,15 @@ func (sl *SkipList[K, V]) Delete(key K) bool {
 			}
 			sl.head = newHead
 			sl.size--
+			sl.autoadjustLevel()
 			return true
 		} else { // erstes und einziges
 			sl.head = nil
-			sl.size = 0
+			sl.size--
+			sl.autoadjustLevel()
 			return true
 		}
 	}
-
 	// oder es ist ein element in der mitte
 
 	// jetzt müsen nur noch die referenten auf die referenzen der node geändert werden
@@ -216,6 +201,7 @@ func (sl *SkipList[K, V]) Delete(key K) bool {
 		}
 	}
 	sl.size--
+	sl.autoadjustLevel()
 	return true
 }
 

@@ -5,8 +5,28 @@ import (
 	"testing"
 )
 
-func TestCrud(t *testing.T) {
-	sl := NewSkipList[int, string](6)
+func TestAutoadjust(t *testing.T) {
+	sl := NewSkipList[int, string]()
+	for i := 0; i < 511; i++ {
+		sl.Set(i, "xx")
+	}
+	testutils.Assert(t, sl.level == 8, "höhe sollte jetzt 8 sein, aber war %d", sl.level)
+
+	sl.Set(512, "xx")
+	testutils.Assert(t, sl.level == 9, "höhe sollte jetzt 9 sein, aber war %d", sl.level)
+
+	for i := 0; i < 255; i++ {
+		sl.Delete(i)
+	}
+	testutils.Assert(t, sl.level == 9, "höhe sollte jetzt noch 9 sein, aber war %d", sl.level)
+
+	sl.Delete(256)
+	testutils.Assert(t, sl.level == 8, "höhe sollte jetzt 8 sein, aber war %d", sl.level)
+
+}
+
+func TestCrud_Smoketest(t *testing.T) {
+	sl := NewSkipList[int, string]()
 
 	sl.Set(1, "A 1")
 	sl.Set(90, "A 90")
@@ -23,7 +43,7 @@ func TestCrud(t *testing.T) {
 }
 
 func TestGetOnEmty(t *testing.T) {
-	sl := NewSkipList[int, string](4)
+	sl := NewSkipList[int, string]()
 
 	i := 0
 	for range sl.Keys() {
@@ -43,7 +63,7 @@ func TestGetOnEmty(t *testing.T) {
 }
 
 func TestGet(t *testing.T) {
-	sl := NewSkipList[int, string](4)
+	sl := NewSkipList[int, string]()
 	sl.Set(10, "10")
 	sl.Set(20, "20")
 
@@ -69,7 +89,7 @@ func TestGet(t *testing.T) {
 }
 
 func TestSetDoesNotDuplicate(t *testing.T) {
-	sl := NewSkipList[int, string](4)
+	sl := NewSkipList[int, string]()
 	sl.Set(10, "AA")
 	sl.Set(10, "BB")
 
@@ -81,7 +101,7 @@ func TestSetDoesNotDuplicate(t *testing.T) {
 }
 
 func TestSkipList_Insert(t *testing.T) {
-	sl := NewSkipList[int, string](4)
+	sl := NewSkipList[int, string]()
 	sl.Set(10, "10")
 	sl.Set(20, "20")
 	sl.Set(15, "15")
@@ -91,31 +111,26 @@ func TestSkipList_Insert(t *testing.T) {
 	sl.Set(-1, "-1")
 	sl.Set(0, "0")
 
-	if len(sl.head.next) != 4 {
-		t.Errorf("level in erstem node nicht korrekt")
-	}
+	testutils.Assert(t, sl.level == 3, "level nicht korrekt, was %d (%d)", sl.level)
+	testutils.Assert(t, len(sl.head.next) == 3, "level in erstem node nicht korrekt, was %d (%d)", len(sl.head.next))
 
 	expected := []int{-1, 0, 5, 10, 15, 20, 30, 80}
 	i := 0
 	for key := range sl.Keys() {
-		if expected[i] != key {
-			t.Errorf("falsche reihenfolge an stelle %d. %d erwartet, aber %d bekommen", i, expected[i], key)
-		}
+		testutils.Assert(t, expected[i] == key, "falsche reihenfolge an stelle %d. %d erwartet, aber %d bekommen", i, expected[i], key)
 		i++
 	}
 
 	expectedValues := []string{"-1", "0", "5", "10", "15", "20", "30", "80"}
 	i = 0
 	for value := range sl.Values() {
-		if expectedValues[i] != value {
-			t.Errorf("falsche reihenfolge an stelle %d. %s erwartet, aber %s bekommen", i, expectedValues[i], value)
-		}
+		testutils.Assert(t, expectedValues[i] == value, "falsche reihenfolge an stelle %d. %s erwartet, aber %s bekommen", i, expectedValues[i], value)
 		i++
 	}
 }
 
 func TestSkipList_find(t *testing.T) {
-	sl := NewSkipList[int, string](4)
+	sl := NewSkipList[int, string]()
 	sl.Set(10, "ZEHN")
 	sl.Set(20, "ZWANZIG")
 	sl.Set(15, "fünfzehn")
@@ -135,7 +150,7 @@ func TestSkipList_find(t *testing.T) {
 }
 
 func TestSkipList_Delete(t *testing.T) {
-	sl := NewSkipList[int, string](4)
+	sl := NewSkipList[int, string]()
 	sl.Set(10, "10")
 	sl.Set(20, "20")
 	sl.Set(15, "15")
@@ -149,9 +164,7 @@ func TestSkipList_Delete(t *testing.T) {
 	sl.Set(-1, "-1")
 	sl.Set(0, "0")
 
-	if len(sl.head.next) != 4 {
-		t.Errorf("level in erstem node nicht korrekt")
-	}
+	testutils.Assert(t, len(sl.head.next) == 2, "level in erstem node nicht korrekt, was %d", len(sl.head.next))
 	expected := []int{-1, 0, 5, 10, 20, 80, 90}
 	i := 0
 	for key := range sl.Keys() {
@@ -172,7 +185,7 @@ func TestSkipList_Delete(t *testing.T) {
 }
 
 func TestSkipList_Delete_Only(t *testing.T) {
-	sl := NewSkipList[int, string](4)
+	sl := NewSkipList[int, string]()
 	sl.Set(10, "10")
 	sl.Delete(10)
 
@@ -182,7 +195,7 @@ func TestSkipList_Delete_Only(t *testing.T) {
 }
 
 func TestSkipList_Delete_First(t *testing.T) {
-	sl := NewSkipList[int, string](4)
+	sl := NewSkipList[int, string]()
 	sl.Set(20, "20")
 	sl.Set(10, "10")
 	sl.Delete(10)
@@ -196,7 +209,7 @@ func TestSkipList_Delete_First(t *testing.T) {
 }
 
 func TestSkipList_Delete_First2(t *testing.T) {
-	sl := NewSkipList[int, string](4)
+	sl := NewSkipList[int, string]()
 	sl.Set(10, "10")
 	sl.Set(20, "20")
 	sl.Delete(10)
