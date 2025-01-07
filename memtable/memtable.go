@@ -11,15 +11,15 @@ import (
 	"sync"
 )
 
-type EntryType int8
+type entryType int8
 
 const (
-	DELETE EntryType = 0
-	WRITE  EntryType = 1
+	delete entryType = 0
+	write  entryType = 1
 )
 
-type Message[K constraints.Ordered, V any] struct {
-	Type  EntryType
+type memtableMessage[K constraints.Ordered, V any] struct {
+	Type  entryType
 	Key   K
 	Value V
 }
@@ -27,7 +27,7 @@ type Message[K constraints.Ordered, V any] struct {
 type Memtable[K constraints.Ordered, V any] struct {
 	name              string
 	index             *skiplist.SkipList[K, V]
-	log               *messagelog.MessageLog[Message[K, V]]
+	log               *messagelog.MessageLog[memtableMessage[K, V]]
 	mutex             *sync.Mutex
 	frs               *fileRotationSequence
 	compactThreshold  int
@@ -38,7 +38,7 @@ func CreateMemtable[K constraints.Ordered, V any](name string, options ...Config
 	config := newConfig(options)
 	if frs, err := initFileRotationSequence(config.datadir, name, config.logSuffix); err != nil {
 		return nil, err
-	} else if messageLog, err := messagelog.NewMessageLog[Message[K, V]](frs.CurrentFilename()); err != nil {
+	} else if messageLog, err := messagelog.NewMessageLog[memtableMessage[K, V]](frs.CurrentFilename()); err != nil {
 		return nil, err
 	} else {
 		repo := &Memtable[K, V]{
@@ -55,11 +55,11 @@ func CreateMemtable[K constraints.Ordered, V any](name string, options ...Config
 }
 
 func (mt *Memtable[K, V]) init() error {
-	_, err := mt.log.Open(func(ctx context.Context, message Message[K, V]) error {
+	_, err := mt.log.Open(func(ctx context.Context, message memtableMessage[K, V]) error {
 		switch message.Type {
-		case WRITE:
+		case write:
 			mt.index.Set(message.Key, message.Value)
-		case DELETE:
+		case delete:
 			mt.index.Delete(message.Key)
 		}
 		return nil
@@ -68,7 +68,7 @@ func (mt *Memtable[K, V]) init() error {
 }
 
 func (mt *Memtable[K, V]) Set(ctx context.Context, key K, value V) (result V, err error) {
-	entry := Message[K, V]{WRITE, key, value}
+	entry := memtableMessage[K, V]{write, key, value}
 	if err := mt.log.Append(ctx, entry); err != nil {
 		return value, err
 	} else {
@@ -86,7 +86,7 @@ func (mt *Memtable[K, V]) Get(key K) (value V, found bool) {
 
 func (mt *Memtable[K, V]) Delete(ctx context.Context, key K) (bool, error) {
 	var v V
-	entry := Message[K, V]{DELETE, key, v}
+	entry := memtableMessage[K, V]{delete, key, v}
 	if err := mt.log.Append(ctx, entry); err != nil {
 		return false, err
 	} else {
@@ -129,14 +129,14 @@ func (mt *Memtable[K, V]) compact() (err error) {
 	mt.mutex.Lock()
 	defer mt.mutex.Unlock()
 
-	if mLog, err := messagelog.NewMessageLog[Message[K, V]](mt.frs.NextFilename()); err != nil {
+	if mLog, err := messagelog.NewMessageLog[memtableMessage[K, V]](mt.frs.NextFilename()); err != nil {
 		return err
-	} else if _, err = mLog.Open(messagelog.Noop[Message[K, V]]()); err != nil {
+	} else if _, err = mLog.Open(messagelog.Noop[memtableMessage[K, V]]()); err != nil {
 		return err
 	} else {
 		entries := mt.index.Entries()
 		for _, entry := range entries {
-			err := mLog.Append(context.Background(), Message[K, V]{WRITE, entry.Key, entry.Value})
+			err := mLog.Append(context.Background(), memtableMessage[K, V]{write, entry.Key, entry.Value})
 			if err != nil {
 				return err
 			}
