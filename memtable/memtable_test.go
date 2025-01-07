@@ -8,7 +8,7 @@ import (
 
 func TestCreateMemtable(t *testing.T) {
 	testutils.RunWithTempDir("TestCreateMemtable", func(dir string) {
-		mt, err := CreateMemtable[int, string](dir, "testmt")
+		mt, err := CreateMemtable[int, string]("testmt", WithDatadir(dir))
 		testutils.AssertNoError(t, err, "Fehler beim erstellen der memtable")
 		_, found := mt.Get(1)
 		testutils.Assert(t, !found, "key 1 found")
@@ -32,7 +32,7 @@ func TestCreateMemtable(t *testing.T) {
 		testutils.Assert(t, 2 == mt.Size(), "größe nicht reduziert")
 		mt.Close()
 
-		reopend, err := CreateMemtable[int, string](dir, "testmt")
+		reopend, err := CreateMemtable[int, string]("testmt", WithDatadir(dir))
 		testutils.AssertNoError(t, err, "Fehler beim erstellen der memtable")
 		testutils.Assert(t, 2 == mt.Size(), "größe nicht reduziert")
 
@@ -45,7 +45,7 @@ func TestCreateMemtable(t *testing.T) {
 
 func TestUpdateLastElement(t *testing.T) {
 	testutils.RunWithTempDir("TestUpdateLastElement", func(dir string) {
-		mt, err := CreateMemtable[int, string](dir, "testmt")
+		mt, err := CreateMemtable[int, string]("testmt", WithDatadir(dir))
 		testutils.AssertNoError(t, err, "Fehler beim erstellen der memtable")
 		mt.Set(context.Background(), 1, "A 1")
 		mt.Set(context.Background(), 2, "A 2")
@@ -56,7 +56,7 @@ func TestUpdateLastElement(t *testing.T) {
 
 func TestRepoensMemtable(t *testing.T) {
 	testutils.RunWithTempDir("TestRepoensMemtable", func(dir string) {
-		mt, err := CreateMemtable[int, string](dir, "testmt")
+		mt, err := CreateMemtable[int, string]("testmt", WithDatadir(dir))
 		testutils.AssertNoError(t, err, "Fehler beim erstellen der memtable")
 
 		mt.Set(context.Background(), 1, "A 1")
@@ -73,7 +73,7 @@ func TestRepoensMemtable(t *testing.T) {
 		mt.Set(context.Background(), 99, "C 99")
 		mt.Close()
 
-		reopend, err := CreateMemtable[int, string](dir, "testmt")
+		reopend, err := CreateMemtable[int, string]("testmt", WithDatadir(dir))
 		value, _ := reopend.Get(1)
 		testutils.Assert(t, value == "D 1", "value 1 is not D 1, but %s", value)
 
@@ -88,4 +88,26 @@ func TestRepoensMemtable(t *testing.T) {
 		reopend.Close()
 	})
 
+}
+
+func TestCompact(t *testing.T) {
+	testutils.RunWithTempDir("testdata", func(dir string) {
+
+		mt, err := CreateMemtable[int, string]("testmt", WithDatadir(dir), WithDisableAutoCompaction(), WithCompactThreshold(100))
+		testutils.AssertNoError(t, err, "fehler beim erzeugen des repo")
+		testutils.Assert(t, mt.frs.CurrentFilename() == "testdata/testmt.0.mtlog", "wrong filename, expected, but got %s", mt.frs.CurrentFilename())
+
+		for i := 0; i < 10; i++ {
+			mt.Set(context.Background(), i, "xx")
+		}
+		testutils.Assert(t, mt.log.MessageCount() == 10, "message count should not be %d ", mt.log.MessageCount())
+		for i := 0; i < 5; i++ {
+			mt.Delete(context.Background(), i)
+		}
+		testutils.Assert(t, mt.log.MessageCount() == 15, "message count should not be %d ", mt.log.MessageCount())
+		mt.compact()
+		testutils.Assert(t, mt.log.MessageCount() == 5, "message count should not be %d ", mt.log.MessageCount())
+		testutils.Assert(t, mt.frs.CurrentFilename() == "testdata/testmt.1.mtlog", "wrong filename, expected, but got %s", mt.frs.CurrentFilename())
+
+	})
 }

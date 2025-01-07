@@ -12,6 +12,12 @@ import (
 
 type MessageConsumer[V any] func(_ context.Context, _ V) error
 
+func Noop[V any]() MessageConsumer[V] {
+	return func(_ context.Context, _ V) error {
+		return nil
+	}
+}
+
 type MessageLog[V any] struct {
 	file         *os.File
 	mutex        *sync.Mutex

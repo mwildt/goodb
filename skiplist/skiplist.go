@@ -3,6 +3,7 @@ package skiplist
 import (
 	"bytes"
 	"fmt"
+	"github.com/mwildt/goodb/base"
 	"golang.org/x/exp/constraints"
 	"log"
 	"math/rand"
@@ -258,6 +259,15 @@ func (sl *SkipList[K, V]) Delete(key K) bool {
 //	return true
 //
 //}
+
+func (sl *SkipList[K, V]) Entries() (result []base.Entry[K, V]) {
+	current := sl.head
+	for current != nil {
+		result = append(result, base.Entry[K, V]{current.key, current.value})
+		current = current.next[0]
+	}
+	return result
+}
 
 func (sl *SkipList[K, V]) Keys() <-chan K {
 	ch := make(chan K)

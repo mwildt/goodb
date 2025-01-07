@@ -2,10 +2,10 @@ package memtable
 
 import (
 	"context"
+	"github.com/mwildt/goodb/base"
 	"github.com/mwildt/goodb/messagelog"
 	"github.com/mwildt/goodb/skiplist"
 	"golang.org/x/exp/constraints"
-
 	"sync"
 )
 
@@ -22,35 +22,76 @@ type Message[K constraints.Ordered, V any] struct {
 	Value V
 }
 
-type Entry[K constraints.Ordered, V any] struct {
-	Key   K
-	Value V
-}
-
 type Memtable[K constraints.Ordered, V any] struct {
-	name  string
-	index *skiplist.SkipList[K, V]
-	log   *messagelog.MessageLog[Message[K, V]]
-	mutex *sync.Mutex
-	frs   *fileRotationSequence
+	name              string
+	index             *skiplist.SkipList[K, V]
+	log               *messagelog.MessageLog[Message[K, V]]
+	mutex             *sync.Mutex
+	frs               *fileRotationSequence
+	compactThreshold  int
+	enableAutoCompact bool
 }
 
-func CreateMemtable[K constraints.Ordered, V any](datadir string, name string) (*Memtable[K, V], error) {
-	if frs, err := initFileRotationSequence(datadir, name, "mt.log"); err != nil {
+type memtableConfiguration struct {
+	datadir           string
+	logSuffix         string
+	compactThreshold  int
+	enableAutoCompact bool
+}
+
+type ConfigOption func(*memtableConfiguration)
+
+func newConfig(options []ConfigOption) memtableConfiguration {
+	config := memtableConfiguration{
+		datadir:           "./data",
+		logSuffix:         "mtlog",
+		compactThreshold:  100,
+		enableAutoCompact: true,
+	}
+	for _, opt := range options {
+		opt(&config)
+	}
+
+	return config
+}
+
+func WithDatadir(value string) ConfigOption {
+
+	return func(c *memtableConfiguration) {
+		c.datadir = value
+	}
+}
+
+func WithCompactThreshold(value int) ConfigOption {
+	return func(c *memtableConfiguration) {
+		c.compactThreshold = value
+	}
+}
+
+func WithDisableAutoCompaction() ConfigOption {
+	return func(c *memtableConfiguration) {
+		c.enableAutoCompact = false
+	}
+}
+
+func CreateMemtable[K constraints.Ordered, V any](name string, options ...ConfigOption) (*Memtable[K, V], error) {
+	config := newConfig(options)
+	if frs, err := initFileRotationSequence(config.datadir, name, config.logSuffix); err != nil {
 		return nil, err
 	} else if messageLog, err := messagelog.NewMessageLog[Message[K, V]](frs.CurrentFilename()); err != nil {
 		return nil, err
 	} else {
 		repo := &Memtable[K, V]{
-			name:  name,
-			index: skiplist.NewSkipList[K, V](),
-			log:   messageLog,
-			mutex: &sync.Mutex{},
-			frs:   frs,
+			name:              name,
+			index:             skiplist.NewSkipList[K, V](),
+			log:               messageLog,
+			mutex:             &sync.Mutex{},
+			frs:               frs,
+			compactThreshold:  config.compactThreshold,
+			enableAutoCompact: config.enableAutoCompact,
 		}
 		return repo, repo.init()
 	}
-
 }
 
 func (mt *Memtable[K, V]) init() error {
@@ -72,6 +113,9 @@ func (mt *Memtable[K, V]) Set(ctx context.Context, key K, value V) (result V, er
 		return value, err
 	} else {
 		mt.index.Set(key, value)
+		defer func() {
+			go mt.autoCompaction()
+		}()
 		return value, err
 	}
 }
@@ -98,20 +142,8 @@ func (mt *Memtable[K, V]) Values() <-chan V {
 	return mt.index.Values()
 }
 
-func (mt *Memtable[K, V]) Entries() <-chan Entry[K, V] {
-	keys := mt.Keys()
-	values := mt.Values()
-	result := make(chan Entry[K, V])
-	ok := true
-	for ok {
-		key, ok1 := <-keys
-		value, ok2 := <-values
-		ok = ok1 && ok2
-		if ok {
-			result <- Entry[K, V]{key, value}
-		}
-	}
-	return result
+func (mt *Memtable[K, V]) Entries() []base.Entry[K, V] {
+	return mt.index.Entries()
 }
 
 func (mt *Memtable[K, V]) Size() int {
@@ -120,4 +152,43 @@ func (mt *Memtable[K, V]) Size() int {
 
 func (mt *Memtable[K, V]) Close() error {
 	return mt.log.Close()
+}
+
+func (mt *Memtable[K, V]) autoCompaction() (err error) {
+	if !mt.enableAutoCompact {
+		return nil
+	}
+	if mt.log.MessageCount() >= mt.index.Size()+mt.compactThreshold {
+		return mt.compact()
+	}
+	return nil
+}
+
+func (mt *Memtable[K, V]) compact() (err error) {
+
+	mt.mutex.Lock()
+	defer mt.mutex.Unlock()
+
+	if mLog, err := messagelog.NewMessageLog[Message[K, V]](mt.frs.NextFilename()); err != nil {
+		return err
+	} else if _, err = mLog.Open(messagelog.Noop[Message[K, V]]()); err != nil {
+		return err
+	} else {
+		entries := mt.index.Entries()
+		for _, entry := range entries {
+			err := mLog.Append(context.Background(), Message[K, V]{WRITE, entry.Key, entry.Value})
+			if err != nil {
+				return err
+			}
+		}
+
+		oldStore := mt.log
+		mt.log = mLog
+
+		defer func() {
+			oldStore.Close()
+			oldStore.Delete()
+		}()
+		return nil
+	}
 }
