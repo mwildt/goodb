@@ -1,3 +1,5 @@
+// Package memtable: a simple in memory datastructure that represents a key-value store, that is mirrored to disk
+// using a write-ahead log
 package memtable
 
 import (
