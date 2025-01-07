@@ -1,3 +1,3 @@
 # GO Object Database
 
-A Simple Object Storage Database written in go from Scratch
+A Simple Object Storage Database using SkipLists and Write-Ahread-Logging -- written in Golang from Scratch
