@@ -2,9 +2,9 @@ package messagelog
 
 import (
 	"context"
-	"encoding/base64"
 	"encoding/binary"
 	"fmt"
+	"github.com/mwildt/goodb/base"
 	"io"
 	"os"
 	"sync"
@@ -21,8 +21,9 @@ func Noop[V any]() MessageConsumer[V] {
 type MessageLog[V any] struct {
 	file         *os.File
 	mutex        *sync.Mutex
-	encoding     *base64.Encoding
 	messageCount int
+	decoder      base.Decoder[V]
+	encoder      base.Encoder[V]
 }
 
 func NewMessageLog[V any](filename string) (log *MessageLog[V], err error) {
@@ -32,8 +33,23 @@ func NewMessageLog[V any](filename string) (log *MessageLog[V], err error) {
 		return &MessageLog[V]{
 			file:         file,
 			mutex:        &sync.Mutex{},
-			encoding:     base64.RawStdEncoding,
 			messageCount: 0,
+			encoder:      base.B64JsonEncoder[V],
+			decoder:      base.B64JsonDecoder[V],
+		}, nil
+	}
+}
+
+func NewMessageLogEncode[V any](filename string, encoder base.Encoder[V], decoder base.Decoder[V]) (log *MessageLog[V], err error) {
+	if file, err := os.OpenFile(filename, os.O_CREATE|os.O_RDWR|os.O_APPEND, 0644); err != nil {
+		return log, err
+	} else {
+		return &MessageLog[V]{
+			file:         file,
+			mutex:        &sync.Mutex{},
+			messageCount: 0,
+			encoder:      encoder,
+			decoder:      decoder,
 		}, nil
 	}
 }
@@ -49,11 +65,11 @@ func (log *MessageLog[V]) Open(consumer MessageConsumer[V]) (writeCount int, err
 }
 
 func (log *MessageLog[V]) encodeMessage(message V) (data []byte, err error) {
-	return B64JsonEncoder[V](message)
+	return log.encoder(message)
 }
 
 func (log *MessageLog[V]) decodeMessage(data []byte) (message V, err error) {
-	return B64JsonDecoder[V](data)
+	return log.decoder(data)
 }
 
 func (log *MessageLog[V]) Append(_ context.Context, message V) (err error) {
@@ -111,4 +127,8 @@ func (log *MessageLog[V]) Delete() {
 
 func (log *MessageLog[V]) MessageCount() int {
 	return log.messageCount
+}
+
+func (log *MessageLog[V]) GetFilename() string {
+	return log.file.Name()
 }

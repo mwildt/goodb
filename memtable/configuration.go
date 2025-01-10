@@ -1,10 +1,13 @@
 package memtable
 
+type MigrationObject map[string]interface{}
+
 type memtableConfiguration struct {
 	datadir           string
 	logSuffix         string
 	compactThreshold  int
 	enableAutoCompact bool
+	migrations        []Migration[MigrationObject]
 }
 
 type ConfigOption func(*memtableConfiguration)
@@ -15,6 +18,7 @@ func newConfig(options []ConfigOption) memtableConfiguration {
 		logSuffix:         "mtlog",
 		compactThreshold:  100,
 		enableAutoCompact: true,
+		migrations:        make([]Migration[MigrationObject], 0),
 	}
 	for _, opt := range options {
 		opt(&config)
@@ -22,8 +26,13 @@ func newConfig(options []ConfigOption) memtableConfiguration {
 	return config
 }
 
-func WithDatadir(value string) ConfigOption {
+func WithMigration(name, version string, handler func(MigrationObject) (MigrationObject, error)) ConfigOption {
+	return func(c *memtableConfiguration) {
+		c.migrations = append(c.migrations, Migration[MigrationObject]{name, version, handler})
+	}
+}
 
+func WithDatadir(value string) ConfigOption {
 	return func(c *memtableConfiguration) {
 		c.datadir = value
 	}
