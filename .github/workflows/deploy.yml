@@ -1,0 +1,24 @@
+name: Deploy
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+jobs:
+
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.21'
+
+      - name: Test
+        run: go test -v ./...
+
+      - name: Deploy
+        run:  GOPROXY=proxy.golang.org go list -m github.com/mwildt/goodb@${{ github.ref_name }}
