@@ -1,5 +1,4 @@
-// Package memtable: a simple in memory datastructure that represents a key-value store, that is mirrored to disk
-// using a write-ahead log
+// Package memtable contains a simple in memory datastructure that represents a key-value store, that is mirrored to disk using a write-ahead log
 package memtable
 
 import (
@@ -24,6 +23,7 @@ type memtableMessage[K constraints.Ordered, V any] struct {
 	Value V
 }
 
+// Memtable A simple memtable implementation using a skiplist in-memory index and write ahead log for persistence
 type Memtable[K constraints.Ordered, V any] struct {
 	name              string
 	index             *skiplist.SkipList[K, V]
@@ -36,6 +36,7 @@ type Memtable[K constraints.Ordered, V any] struct {
 	decoder           base.Decoder[V]
 }
 
+// CreateMemtable create a new instance of Memtable
 func CreateMemtable[K constraints.Ordered, V any](name string, options ...ConfigOption) (*Memtable[K, V], error) {
 	config := newConfig(options)
 	frs, err := initFileRotationSequence(config.datadir, name, config.logSuffix)
@@ -87,6 +88,7 @@ func (mt *Memtable[K, V]) init() error {
 	return err
 }
 
+// Set e key value pair. Existing entries will be replaced
 func (mt *Memtable[K, V]) Set(ctx context.Context, key K, value V) (result V, err error) {
 	if encoded, err := mt.encoder(value); err != nil {
 		return result, err
@@ -104,10 +106,12 @@ func (mt *Memtable[K, V]) Set(ctx context.Context, key K, value V) (result V, er
 	}
 }
 
+// Get finds an existing element
 func (mt *Memtable[K, V]) Get(key K) (value V, found bool) {
 	return mt.index.Get(key)
 }
 
+// Delete removes an existing element by key and returns true if one was deleted
 func (mt *Memtable[K, V]) Delete(ctx context.Context, key K) (bool, error) {
 	entry := memtableMessage[K, []byte]{delete, key, []byte{}}
 	if err := mt.log.Append(ctx, entry); err != nil {
