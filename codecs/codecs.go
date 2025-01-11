@@ -4,7 +4,6 @@ package codecs
 import (
 	"encoding/base64"
 	"encoding/json"
-	"fmt"
 )
 
 type Codec[T any] interface {
@@ -46,7 +45,6 @@ func (codec Base64WrapperCodec[T]) Encode(value T) (bytes []byte, err error) {
 	if encoded, err := codec.delegate.Encode(value); err != nil {
 		return bytes, err
 	} else {
-		fmt.Printf("%v -> %s\n", value, string(encoded))
 		bytes = make([]byte, codec.encoding.EncodedLen(len(encoded)))
 		codec.encoding.Encode(bytes, encoded)
 		return bytes, err
