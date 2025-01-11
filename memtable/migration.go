@@ -12,7 +12,7 @@ import (
 )
 
 // represents an executed Migration
-type MigrationLog struct {
+type migrationLogMessage struct {
 	Name       string
 	Version    string
 	Executed   time.Time
@@ -30,20 +30,20 @@ type MigrationManager[K constraints.Ordered, M any] struct {
 	datadir        string
 	collectionName string
 	frs            *fileRotationSequence
-	migrationLogs  []MigrationLog
-	migrationLog   *messagelog.MessageLog[MigrationLog]
+	migrationLogs  []migrationLogMessage
+	migrationLog   *messagelog.MessageLog[migrationLogMessage]
 	migrations     []Migration[M]
 }
 
 func NewMigrationManager[K constraints.Ordered, M any](name string, frs *fileRotationSequence, migrations ...Migration[M]) (*MigrationManager[K, M], error) {
 	migPath := path.Join(frs.basedir, fmt.Sprintf("%s.migration.log", name))
-	if migrationLog, err := messagelog.NewMessageLog[MigrationLog](migPath); err != nil {
+	if migrationLog, err := messagelog.NewMessageLog[migrationLogMessage](migPath); err != nil {
 		return nil, err
 	} else {
 		manager := &MigrationManager[K, M]{
 			collectionName: name,
 			frs:            frs,
-			migrationLogs:  make([]MigrationLog, 0),
+			migrationLogs:  make([]migrationLogMessage, 0),
 			migrationLog:   migrationLog,
 			migrations:     migrations,
 		}
@@ -53,7 +53,7 @@ func NewMigrationManager[K constraints.Ordered, M any](name string, frs *fileRot
 }
 
 func (mm *MigrationManager[K, M]) init() error {
-	_, err := mm.migrationLog.Open(func(ctx context.Context, migrationLog MigrationLog) error {
+	_, err := mm.migrationLog.Open(func(ctx context.Context, migrationLog migrationLogMessage) error {
 		mm.migrationLogs = append(mm.migrationLogs, migrationLog)
 		return nil
 	})
@@ -113,7 +113,7 @@ func (manager *MigrationManager[K, M]) migrate(ctx context.Context) error {
 			log.Printf("[migrationmanager] all %d migrations have been applied. %d items have been migrated.\n", len(migrationsToApply), count)
 			for _, migration := range migrationsToApply {
 				log.Printf("[migrationmanager] migration (name %s, version: %s) has been executed successfully. Append to log.\n", migration.Name, migration.Version)
-				migrationLog := MigrationLog{migration.Name, migration.Version, execTime, sourceFile, targetFile}
+				migrationLog := migrationLogMessage{migration.Name, migration.Version, execTime, sourceFile, targetFile}
 				if err = manager.migrationLog.Append(ctx, migrationLog); err != nil {
 					return err
 				}
