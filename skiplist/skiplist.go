@@ -117,7 +117,6 @@ func (sl *SkipList[K, V]) Get(key K) (value V, found bool) {
 }
 
 func (sl *SkipList[K, V]) Set(key K, value V) {
-	//fmt.Printf("SkipList::Set [%v]: {%v}\n", key, value)
 
 	if sl.head == nil {
 		sl.head = &skipListNode[K, V]{key, value, make([]*skipListNode[K, V], sl.level)}
@@ -161,7 +160,6 @@ func (sl *SkipList[K, V]) Set(key K, value V) {
 }
 
 func (sl *SkipList[K, V]) Delete(key K) bool {
-	//fmt.Printf("SkipList::Delete [%v]\n", key)
 	if sl.head == nil {
 		return false
 	}
@@ -205,60 +203,6 @@ func (sl *SkipList[K, V]) Delete(key K) bool {
 	sl.autoadjustLevel()
 	return true
 }
-
-//func (sl *SkipList[K, V]) Delete(key K) bool {
-//	fmt.Printf("SkipList::Delete [%v]\n", key)
-//	// list is empty
-
-//
-//	// das erste element soll entfernt werden
-//	if sl.head.key == key {
-//		oldHead := sl.head
-//		newHead := oldHead.next[0]
-//		// falls newHead nicht nil ist, muss der knoten ggf um die oberen level erweitert werden
-//		if newHead != nil {
-//			newNext := make([]*skipListNode[K, V], sl.level)
-//
-//			for currentLevel := sl.level - 1; currentLevel >= 0; currentLevel-- {
-//				if newHead.hasLevel(currentLevel) {
-//					newNext[currentLevel] = newHead.next[currentLevel]
-//				} else {
-//					newNext[currentLevel] = oldHead.next[currentLevel]
-//				}
-//			}
-//			newHead.next = newNext
-//		}
-//		sl.head = newHead
-//		sl.size--
-//		return true
-//	}
-//
-//	currentNode := sl.head
-//	update := make([]*skipListNode[K, V], sl.level)
-//	for currentLevel := sl.level - 1; currentLevel >= 0; currentLevel-- {
-//		for currentNode.next[currentLevel] != nil && currentNode.next[currentLevel].key < key {
-//			currentNode = currentNode.next[currentLevel]
-//		}
-//		if currentNode.next[currentLevel] != nil && currentNode.next[currentLevel].key == key {
-//			update[currentLevel] = currentNode
-//			fmt.Printf("update level %d node %v\n", currentLevel, currentNode.key)
-//		}
-//	}
-//
-//	// haben wir überhaupt einen node gefunden ?
-//	if update[0] == nil || update[0].next[0].key != key {
-//		return false
-//	}
-//	toBeRemoved := update[0].next[0]
-//	for currentLevel := 0; currentLevel < len(update); currentLevel++ {
-//		if update[currentLevel] != nil && update[currentLevel].next[0] == toBeRemoved {
-//			update[currentLevel].next[0] = toBeRemoved.next[0]
-//		}
-//	}
-//	sl.size--
-//	return true
-//
-//}
 
 func (sl *SkipList[K, V]) Entries() (result []base.Entry[K, V]) {
 	current := sl.head

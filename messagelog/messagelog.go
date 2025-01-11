@@ -3,9 +3,9 @@ package messagelog
 import (
 	"context"
 	"encoding/binary"
-	"fmt"
 	"github.com/mwildt/goodb/base"
 	"io"
+	"log"
 	"os"
 	"sync"
 )
@@ -54,48 +54,48 @@ func NewMessageLogEncode[V any](filename string, encoder base.Encoder[V], decode
 	}
 }
 
-func (log *MessageLog[V]) Open(consumer MessageConsumer[V]) (writeCount int, err error) {
-	if writeCount, err = log.readAll(context.Background(), consumer); err != nil {
-		fmt.Printf("MessageLog::Open mit error %s", err.Error())
+func (mlog *MessageLog[V]) Open(consumer MessageConsumer[V]) (writeCount int, err error) {
+	if writeCount, err = mlog.readAll(context.Background(), consumer); err != nil {
+		log.Printf("MessageLog::Open mit error %s", err.Error())
 		return writeCount, err
 	} else {
-		log.messageCount = writeCount
+		mlog.messageCount = writeCount
 		return writeCount, err
 	}
 }
 
-func (log *MessageLog[V]) encodeMessage(message V) (data []byte, err error) {
-	return log.encoder(message)
+func (mlog *MessageLog[V]) encodeMessage(message V) (data []byte, err error) {
+	return mlog.encoder(message)
 }
 
-func (log *MessageLog[V]) decodeMessage(data []byte) (message V, err error) {
-	return log.decoder(data)
+func (mlog *MessageLog[V]) decodeMessage(data []byte) (message V, err error) {
+	return mlog.decoder(data)
 }
 
-func (log *MessageLog[V]) Append(_ context.Context, message V) (err error) {
-	log.mutex.Lock()
-	defer log.mutex.Unlock()
-	if encoded, err := log.encodeMessage(message); err != nil {
+func (mlog *MessageLog[V]) Append(_ context.Context, message V) (err error) {
+	mlog.mutex.Lock()
+	defer mlog.mutex.Unlock()
+	if encoded, err := mlog.encodeMessage(message); err != nil {
 		return err
 	} else {
 		buffLenBytes := make([]byte, 4)
 		binary.LittleEndian.PutUint32(buffLenBytes, uint32(len(encoded)))
-		if _, err := log.file.Write(buffLenBytes); err != nil {
+		if _, err := mlog.file.Write(buffLenBytes); err != nil {
 			return err
-		} else if _, err := log.file.Write(encoded); err != nil {
+		} else if _, err := mlog.file.Write(encoded); err != nil {
 			return err
 		} else {
-			log.messageCount = log.messageCount + 1
+			mlog.messageCount = mlog.messageCount + 1
 		}
 	}
 	return err
 }
 
-func (log *MessageLog[V]) readAll(ctx context.Context, consumer MessageConsumer[V]) (count int, err error) {
+func (mlog *MessageLog[V]) readAll(ctx context.Context, consumer MessageConsumer[V]) (count int, err error) {
 
 	for {
 		lenBytes := make([]byte, 4)
-		if _, err := io.ReadFull(log.file, lenBytes); err != nil {
+		if _, err := io.ReadFull(mlog.file, lenBytes); err != nil {
 			if err == io.EOF {
 				return count, nil
 			}
@@ -103,9 +103,9 @@ func (log *MessageLog[V]) readAll(ctx context.Context, consumer MessageConsumer[
 		}
 		dataLen := binary.LittleEndian.Uint32(lenBytes)
 		dataBuffer := make([]byte, int(dataLen))
-		if _, err := io.ReadFull(log.file, dataBuffer); err != nil {
+		if _, err := io.ReadFull(mlog.file, dataBuffer); err != nil {
 			return count, err
-		} else if message, err := log.decodeMessage(dataBuffer); err != nil {
+		} else if message, err := mlog.decodeMessage(dataBuffer); err != nil {
 			return count, err
 		} else if err = consumer(ctx, message); err != nil {
 			return count, err
@@ -116,19 +116,19 @@ func (log *MessageLog[V]) readAll(ctx context.Context, consumer MessageConsumer[
 	return count, err
 }
 
-func (log *MessageLog[V]) Close() error {
-	log.file.Sync()
-	return log.file.Close()
+func (mlog *MessageLog[V]) Close() error {
+	mlog.file.Sync()
+	return mlog.file.Close()
 }
 
-func (log *MessageLog[V]) Delete() {
-	os.Remove(log.file.Name())
+func (mlog *MessageLog[V]) Delete() {
+	os.Remove(mlog.file.Name())
 }
 
-func (log *MessageLog[V]) MessageCount() int {
-	return log.messageCount
+func (mlog *MessageLog[V]) MessageCount() int {
+	return mlog.messageCount
 }
 
-func (log *MessageLog[V]) GetFilename() string {
-	return log.file.Name()
+func (mlog *MessageLog[V]) GetFilename() string {
+	return mlog.file.Name()
 }

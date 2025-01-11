@@ -7,6 +7,7 @@ import (
 	"github.com/mwildt/goodb/messagelog"
 	"github.com/mwildt/goodb/skiplist"
 	"golang.org/x/exp/constraints"
+	"log"
 	"sync"
 )
 
@@ -72,7 +73,7 @@ func CreateMemtable[K constraints.Ordered, V any](name string, options ...Config
 
 func (mt *Memtable[K, V]) init() error {
 
-	_, err := mt.log.Open(func(ctx context.Context, message memtableMessage[K, []byte]) error {
+	n, err := mt.log.Open(func(ctx context.Context, message memtableMessage[K, []byte]) error {
 		switch message.Type {
 		case write:
 			if decoded, err := mt.decoder(message.Value); err != nil {
@@ -85,6 +86,7 @@ func (mt *Memtable[K, V]) init() error {
 		}
 		return nil
 	})
+	log.Printf("Memtable loaded %d records from %s\n", n, mt.log.GetFilename())
 	return err
 }
 

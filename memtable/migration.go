@@ -6,6 +6,7 @@ import (
 	"github.com/mwildt/goodb/base"
 	"github.com/mwildt/goodb/messagelog"
 	"golang.org/x/exp/constraints"
+	"log"
 	"path"
 	"time"
 )
@@ -64,17 +65,17 @@ func (manager *MigrationManager[K, M]) migrate(ctx context.Context) error {
 	migrationsToApply := make([]Migration[M], 0)
 
 	for idx, migration := range manager.migrations {
-		fmt.Printf("[migrationmanager] %02d check migration (name %s, version: %s): ", idx, migration.Name, migration.Version)
+		log.Printf("[migrationmanager] %02d check migration (name %s, version: %s): ", idx, migration.Name, migration.Version)
 		if idx < len(manager.migrationLogs) {
 			executedMigration := manager.migrationLogs[idx]
 			if executedMigration.Name != migration.Name || executedMigration.Version != migration.Version {
-				fmt.Printf("migration order error, found %v.\n", manager.migrations[idx])
+				log.Printf("migration order error, found %v.\n", manager.migrations[idx])
 				return fmt.Errorf("migration order error")
 			} else {
-				fmt.Printf("migration already executed (%v).\n", manager.migrations[idx])
+				log.Printf("migration already executed (%v).\n", manager.migrations[idx])
 			}
 		} else {
-			fmt.Printf("enqueue migration for execution.\n")
+			log.Printf("enqueue migration for execution.\n")
 			migrationsToApply = append(migrationsToApply, migration)
 		}
 	}
@@ -90,7 +91,7 @@ func (manager *MigrationManager[K, M]) migrate(ctx context.Context) error {
 			return err
 		} else {
 
-			source.Open(func(ctx context.Context, message memtableMessage[K, []byte]) error {
+			count, err := source.Open(func(ctx context.Context, message memtableMessage[K, []byte]) error {
 				// decoding
 				migrationObject, err := base.B64JsonDecoder[M](message.Value)
 				if err != nil {
@@ -106,8 +107,12 @@ func (manager *MigrationManager[K, M]) migrate(ctx context.Context) error {
 				return target.Append(ctx, message)
 			})
 
+			if err != nil {
+				return nil
+			}
+			log.Printf("[migrationmanager] all %d migrations have been applied. %d items have been migrated.\n", len(migrationsToApply), count)
 			for _, migration := range migrationsToApply {
-				fmt.Printf("[migrationmanager] migration (name %s, version: %s) has been executed successfully. Append to log.\n", migration.Name, migration.Version)
+				log.Printf("[migrationmanager] migration (name %s, version: %s) has been executed successfully. Append to log.\n", migration.Name, migration.Version)
 				migrationLog := MigrationLog{migration.Name, migration.Version, execTime, sourceFile, targetFile}
 				if err = manager.migrationLog.Append(ctx, migrationLog); err != nil {
 					return err
