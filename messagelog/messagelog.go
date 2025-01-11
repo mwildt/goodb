@@ -1,3 +1,5 @@
+// Contains a simple implementation of a write-ahead log for writing and reading messages.
+// Reading takes place once when the log is opened.
 package messagelog
 
 import (

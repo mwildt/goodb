@@ -1,4 +1,5 @@
-// Package memtable contains a simple in memory datastructure that represents a key-value store, that is mirrored to disk using a write-ahead log
+// Contains a simple key-value store for saving object data with a key. Persistence takes place via a simple
+// write-ahead-log. All data is also stored in a skip-list in the memory.
 package memtable
 
 import (

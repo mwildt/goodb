@@ -1,3 +1,4 @@
+// Contains a simple implementation of a skip list.
 package skiplist
 
 import (
