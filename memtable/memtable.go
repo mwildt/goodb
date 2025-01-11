@@ -5,6 +5,7 @@ package memtable
 import (
 	"context"
 	"github.com/mwildt/goodb/base"
+	"github.com/mwildt/goodb/codecs"
 	"github.com/mwildt/goodb/messagelog"
 	"github.com/mwildt/goodb/skiplist"
 	"golang.org/x/exp/constraints"
@@ -34,8 +35,7 @@ type Memtable[K constraints.Ordered, V any] struct {
 	frs               *fileRotationSequence
 	compactThreshold  int
 	enableAutoCompact bool
-	encoder           base.Encoder[V]
-	decoder           base.Decoder[V]
+	codec             codecs.Codec[V]
 }
 
 // CreateMemtable create a new instance of Memtable
@@ -47,7 +47,7 @@ func CreateMemtable[K constraints.Ordered, V any](name string, options ...Config
 	}
 
 	if len(config.migrations) > 0 {
-		if migman, err := NewMigrationManager[K, MigrationObject](name, frs, config.migrations...); err != nil {
+		if migman, err := NewMigrationManager[K, MigrationObject](name, frs, codecs.NewJsonCodec[MigrationObject](), config.migrations...); err != nil {
 			return nil, err
 		} else if err = migman.migrate(context.Background()); err != nil {
 			return nil, err
@@ -65,8 +65,7 @@ func CreateMemtable[K constraints.Ordered, V any](name string, options ...Config
 			frs:               frs,
 			compactThreshold:  config.compactThreshold,
 			enableAutoCompact: config.enableAutoCompact,
-			encoder:           base.B64JsonEncoder[V],
-			decoder:           base.B64JsonDecoder[V],
+			codec:             codecs.NewJsonCodec[V](),
 		}
 		return repo, repo.init()
 	}
@@ -77,7 +76,7 @@ func (mt *Memtable[K, V]) init() error {
 	n, err := mt.log.Open(func(ctx context.Context, message memtableMessage[K, []byte]) error {
 		switch message.Type {
 		case write:
-			if decoded, err := mt.decoder(message.Value); err != nil {
+			if decoded, err := mt.codec.Decode(message.Value); err != nil {
 				return err
 			} else {
 				mt.index.Set(message.Key, decoded)
@@ -93,7 +92,7 @@ func (mt *Memtable[K, V]) init() error {
 
 // Set e key value pair. Existing entries will be replaced
 func (mt *Memtable[K, V]) Set(ctx context.Context, key K, value V) (result V, err error) {
-	if encoded, err := mt.encoder(value); err != nil {
+	if encoded, err := mt.codec.Encode(value); err != nil {
 		return result, err
 	} else {
 		entry := memtableMessage[K, []byte]{write, key, encoded}
@@ -166,7 +165,7 @@ func (mt *Memtable[K, V]) compact() (err error) {
 	} else {
 		entries := mt.index.Entries()
 		for _, entry := range entries {
-			if encoded, err := mt.encoder(entry.Value); err != nil {
+			if encoded, err := mt.codec.Encode(entry.Value); err != nil {
 				return err
 			} else {
 				message := memtableMessage[K, []byte]{write, entry.Key, encoded}

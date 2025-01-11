@@ -5,7 +5,7 @@ package messagelog
 import (
 	"context"
 	"encoding/binary"
-	"github.com/mwildt/goodb/base"
+	"github.com/mwildt/goodb/codecs"
 	"io"
 	"log"
 	"os"
@@ -24,8 +24,7 @@ type MessageLog[V any] struct {
 	file         *os.File
 	mutex        *sync.Mutex
 	messageCount int
-	decoder      base.Decoder[V]
-	encoder      base.Encoder[V]
+	codec        codecs.Codec[V]
 }
 
 func NewMessageLog[V any](filename string) (log *MessageLog[V], err error) {
@@ -36,22 +35,7 @@ func NewMessageLog[V any](filename string) (log *MessageLog[V], err error) {
 			file:         file,
 			mutex:        &sync.Mutex{},
 			messageCount: 0,
-			encoder:      base.B64JsonEncoder[V],
-			decoder:      base.B64JsonDecoder[V],
-		}, nil
-	}
-}
-
-func NewMessageLogEncode[V any](filename string, encoder base.Encoder[V], decoder base.Decoder[V]) (log *MessageLog[V], err error) {
-	if file, err := os.OpenFile(filename, os.O_CREATE|os.O_RDWR|os.O_APPEND, 0644); err != nil {
-		return log, err
-	} else {
-		return &MessageLog[V]{
-			file:         file,
-			mutex:        &sync.Mutex{},
-			messageCount: 0,
-			encoder:      encoder,
-			decoder:      decoder,
+			codec:        codecs.NewBase64JsonCodec[V](),
 		}, nil
 	}
 }
@@ -66,18 +50,10 @@ func (mlog *MessageLog[V]) Open(consumer MessageConsumer[V]) (writeCount int, er
 	}
 }
 
-func (mlog *MessageLog[V]) encodeMessage(message V) (data []byte, err error) {
-	return mlog.encoder(message)
-}
-
-func (mlog *MessageLog[V]) decodeMessage(data []byte) (message V, err error) {
-	return mlog.decoder(data)
-}
-
 func (mlog *MessageLog[V]) Append(_ context.Context, message V) (err error) {
 	mlog.mutex.Lock()
 	defer mlog.mutex.Unlock()
-	if encoded, err := mlog.encodeMessage(message); err != nil {
+	if encoded, err := mlog.codec.Encode(message); err != nil {
 		return err
 	} else {
 		buffLenBytes := make([]byte, 4)
@@ -107,7 +83,7 @@ func (mlog *MessageLog[V]) readAll(ctx context.Context, consumer MessageConsumer
 		dataBuffer := make([]byte, int(dataLen))
 		if _, err := io.ReadFull(mlog.file, dataBuffer); err != nil {
 			return count, err
-		} else if message, err := mlog.decodeMessage(dataBuffer); err != nil {
+		} else if message, err := mlog.codec.Decode(dataBuffer); err != nil {
 			return count, err
 		} else if err = consumer(ctx, message); err != nil {
 			return count, err

@@ -10,6 +10,10 @@ import (
 	"math/rand"
 )
 
+type GenericComparable[T any] interface {
+	CompareTo(other T) int
+}
+
 func randomLevel(maxLevel int) int {
 	level := 1
 	for rand.Float64() < 0.5 && level < maxLevel {

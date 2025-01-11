@@ -2,6 +2,7 @@ package memtable
 
 import (
 	"context"
+	"github.com/mwildt/goodb/codecs"
 	"github.com/mwildt/goodb/utils/testutils"
 	"testing"
 )
@@ -32,7 +33,7 @@ func TestNewMigrationManager(t *testing.T) {
 		mt.Set(context.Background(), 3, DataV1{Name: "eins.."})
 		mt.Close()
 
-		migman, err := NewMigrationManager[int, map[string]interface{}](collection, mt.frs, Migration[map[string]interface{}]{
+		migman, err := NewMigrationManager[int, map[string]interface{}](collection, mt.frs, codecs.NewJsonCodec[map[string]interface{}](), Migration[map[string]interface{}]{
 			Name:    "demo",
 			Version: "V__1",
 			Handler: func(obj map[string]interface{}) (map[string]interface{}, error) {

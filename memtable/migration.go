@@ -3,7 +3,7 @@ package memtable
 import (
 	"context"
 	"fmt"
-	"github.com/mwildt/goodb/base"
+	"github.com/mwildt/goodb/codecs"
 	"github.com/mwildt/goodb/messagelog"
 	"golang.org/x/exp/constraints"
 	"log"
@@ -33,9 +33,15 @@ type MigrationManager[K constraints.Ordered, M any] struct {
 	migrationLogs  []migrationLogMessage
 	migrationLog   *messagelog.MessageLog[migrationLogMessage]
 	migrations     []Migration[M]
+	codec          codecs.Codec[M]
 }
 
-func NewMigrationManager[K constraints.Ordered, M any](name string, frs *fileRotationSequence, migrations ...Migration[M]) (*MigrationManager[K, M], error) {
+func NewMigrationManager[K constraints.Ordered, M any](
+	name string,
+	frs *fileRotationSequence,
+	codec codecs.Codec[M],
+	migrations ...Migration[M],
+) (*MigrationManager[K, M], error) {
 	migPath := path.Join(frs.basedir, fmt.Sprintf("%s.migration.log", name))
 	if migrationLog, err := messagelog.NewMessageLog[migrationLogMessage](migPath); err != nil {
 		return nil, err
@@ -46,6 +52,7 @@ func NewMigrationManager[K constraints.Ordered, M any](name string, frs *fileRot
 			migrationLogs:  make([]migrationLogMessage, 0),
 			migrationLog:   migrationLog,
 			migrations:     migrations,
+			codec:          codec,
 		}
 
 		return manager, manager.init()
@@ -93,7 +100,7 @@ func (manager *MigrationManager[K, M]) migrate(ctx context.Context) error {
 
 			count, err := source.Open(func(ctx context.Context, message memtableMessage[K, []byte]) error {
 				// decoding
-				migrationObject, err := base.B64JsonDecoder[M](message.Value)
+				migrationObject, err := manager.codec.Decode(message.Value)
 				if err != nil {
 					return err
 				}
@@ -103,7 +110,7 @@ func (manager *MigrationManager[K, M]) migrate(ctx context.Context) error {
 					}
 				}
 				// re encoding
-				message.Value, err = base.B64JsonEncoder[M](migrationObject)
+				message.Value, err = manager.codec.Encode(migrationObject)
 				return target.Append(ctx, message)
 			})
 
